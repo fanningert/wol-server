@@ -6,11 +6,6 @@ import (
 	"net"
 )
 
-type packet struct {
-	bytes []byte
-	addr  *net.IPAddr
-}
-
 func main() {
 	//etherWake("14:da:e9:de:d5:82")
 	for {
