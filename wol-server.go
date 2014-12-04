@@ -12,14 +12,28 @@ type packet struct {
 }
 
 func main() {
-	etherWake("14:da:e9:de:d5:82")
-	checkHost()
+	//etherWake("14:da:e9:de:d5:82")
+	for {
+		checkHost()
+	}
+}
+
+// extracts the payload from an ipv4 packet
+func extractPayload(b []byte) []byte {
+	// IP Header has 20 bytes
+	if len(b) < 20 {
+		return b
+	}
+	headerLength := int(b[0]&0x0f) << 2
+	return b[headerLength:]
 }
 
 // checks if the Host is alive after we've sent a
 // magic packet
 // also this is currently an utter mess
-func checkHost( /*host net.IP*/ ) bool {
+func checkHost( /*host string*/ ) bool {
+
+	// from here on we want to receive the icmp echo reply
 	icmpIn := make([]byte, 512)
 	icmpOobIn := make([]byte, 512)
 	success := false
@@ -34,13 +48,17 @@ func checkHost( /*host net.IP*/ ) bool {
 		log.Fatalln("Ich verreckte... weil:", err)
 	}
 
-	response := &packet{bytes: icmpIn, addr: remoteAddress}
-	for i := 0; i < 4; i++ {
-		fmt.Println(icmpIn[i])
-	}
+	/*
+		payLoad := extractPayload(icmpIn)
 
-	fmt.Println(response)
-
+		fmt.Println("Type:", payLoad[0])
+		fmt.Println("Code:", payLoad[1])
+		fmt.Println("Checksum:", int(payLoad[2])<<8|int(payLoad[3]))
+		fmt.Println("Identifier:", int(payLoad[4])<<8|int(payLoad[5]))
+		fmt.Println("Sequence Number:", int(payLoad[6])<<8|int(payLoad[7]))
+		//fmt.Println("Header data:", payLoad[8:])
+	*/
+	fmt.Println("pong from:", remoteAddress)
 	return success
 }
 
@@ -49,7 +67,7 @@ func checkHost( /*host net.IP*/ ) bool {
 // no support for directed broadcasts etc
 func etherWake(hostMAC string) {
 	magicPacket := make([]byte, 102)
-	macAddress, err := net.ParseMAC(host)
+	macAddress, err := net.ParseMAC(hostMAC)
 
 	// filling the first part of the magic packet with
 	// FF (6 bytes)
@@ -77,10 +95,12 @@ func etherWake(hostMAC string) {
 		log.Fatal("OMG is br0k:", err)
 	}
 
-	_, err := socket.Write(magicPacket)
-
+	packetLength, err := socket.Write(magicPacket)
 	if err != nil {
 		log.Fatal("OMG", err)
+	}
+	if packetLength != 102 {
+		log.Println("Weird, packet length not the expected 102: ", packetLength)
 	}
 
 	fmt.Println("Sent wol magic packet for: ", macAddress)
