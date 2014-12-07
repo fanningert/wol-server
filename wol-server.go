@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 )
 
 var ident int
+var listenPort int
 
 type icmpMsg struct {
 	Type, Code                       uint8
@@ -27,15 +29,18 @@ func init() {
 }
 
 func main() {
-	host := &host{"tafelrundeTest", "141.70.126.1", "14:da:e9:de:d5:82"}
-	etherWake(host.hwaddress)
-	checkHost(host.ip)
+	http.HandleFunc("/wake", etherWake)
+	http.HandleFunc("/ping", checkHost)
+	http.HandleFunc("/", doRest)
+	http.ListenAndServe("0.0.0.0:8080", nil)
 }
 
 // sends a magic packet to a given MAC-Address
 // this is a pretty basic implementation of WOL
 // no support for directed broadcasts etc
-func etherWake(hostMAC string) {
+func etherWake( /*hostMAC string*/ w http.ResponseWriter, r *http.Request) {
+	var hostMAC string
+	hostMAC = string(r.URL.Query().Get("mac"))
 	magicPacket := make([]byte, 102)
 	macAddress, err := net.ParseMAC(hostMAC)
 
@@ -71,8 +76,7 @@ func etherWake(hostMAC string) {
 	if packetLength != 102 {
 		log.Println("Weird, packet length not the expected 102: ", packetLength)
 	}
-
-	fmt.Println("Sent wol magic packet for: ", macAddress)
+	fmt.Fprintf(w, "magic packet sent to: %v\n", macAddress)
 }
 
 func checksum(packet []byte) uint16 {
@@ -127,10 +131,11 @@ func buildICMPEchoRequest(id, seq, length int) []byte {
 
 // checks if the Host is alive after we've sent a
 // magic packet
-func checkHost(host string) bool {
-	success := false
+func checkHost( /*host string*/ w http.ResponseWriter, r *http.Request) {
 	var err error
 	var connection net.Conn
+	var host string
+	host = string(r.URL.Query().Get("host"))
 
 	send := buildICMPEchoRequest(ident&0xffff, 1, 64)
 
@@ -140,16 +145,16 @@ func checkHost(host string) bool {
 	if err != nil {
 		log.Fatalln("Fuck:", err)
 	}
-	fmt.Println("ping:", host)
-	fmt.Println("sent ID:", int(send[4])<<8|int(send[5]))
+	fmt.Fprintf(w, "received ID: %v\n", int(send[4])<<8|int(send[5]))
 
 	// from here on we want to receive the icmp echo reply
 	icmpReply := make([]byte, 64)
 	_, err = connection.Read(icmpReply)
 
 	recv := getPayload(icmpReply)
+	fmt.Fprintf(w, "received ID: %v", int(recv[4])<<8|int(recv[5]))
+}
 
-	fmt.Println("received ID:", int(recv[4])<<8|int(recv[5]))
-	fmt.Println("pong:", host)
-	return success
+func doRest(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "foobar")
 }
