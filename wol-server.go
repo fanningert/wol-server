@@ -102,9 +102,6 @@ func getPayload(b []byte) []byte {
 
 	return b[headerLength:]
 }
-func getICMPHeader(b []byte) []byte {
-	return b[20:28]
-}
 
 func buildICMPEchoRequest(id, seq, length int) []byte {
 	var buffer bytes.Buffer
