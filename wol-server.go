@@ -1,60 +1,35 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
+	"os"
 )
 
+var ident int
+
+type icmpMsg struct {
+	Type, Code                       uint8
+	Checksum, Identifier, SequenceNo uint16
+}
+
+type host struct {
+	name      string
+	ip        string
+	hwaddress string
+}
+
+func init() {
+	ident = os.Getpid()
+}
+
 func main() {
-	//etherWake("14:da:e9:de:d5:82")
-	for {
-		checkHost()
-	}
-}
-
-// extracts the payload from an ipv4 packet
-func extractPayload(b []byte) []byte {
-	// IP Header has 20 bytes
-	if len(b) < 20 {
-		return b
-	}
-	headerLength := int(b[0]&0x0f) << 2
-	return b[headerLength:]
-}
-
-// checks if the Host is alive after we've sent a
-// magic packet
-// also this is currently an utter mess
-func checkHost( /*host string*/ ) bool {
-
-	// from here on we want to receive the icmp echo reply
-	icmpIn := make([]byte, 512)
-	icmpOobIn := make([]byte, 512)
-	success := false
-	icmpr, err := net.ListenIP("ip4:icmp", nil)
-	if err != nil {
-		log.Println("I only received death:", err)
-	}
-
-	_, _, _, remoteAddress, err := icmpr.ReadMsgIP(icmpIn, icmpOobIn)
-
-	if err != nil {
-		log.Fatalln("Ich verreckte... weil:", err)
-	}
-
-	/*
-		payLoad := extractPayload(icmpIn)
-
-		fmt.Println("Type:", payLoad[0])
-		fmt.Println("Code:", payLoad[1])
-		fmt.Println("Checksum:", int(payLoad[2])<<8|int(payLoad[3]))
-		fmt.Println("Identifier:", int(payLoad[4])<<8|int(payLoad[5]))
-		fmt.Println("Sequence Number:", int(payLoad[6])<<8|int(payLoad[7]))
-		//fmt.Println("Header data:", payLoad[8:])
-	*/
-	fmt.Println("pong from:", remoteAddress)
-	return success
+	host := &host{"tafelrundeTest", "141.70.126.1", "14:da:e9:de:d5:82"}
+	etherWake(host.hwaddress)
+	checkHost(host.ip)
 }
 
 // sends a magic packet to a given MAC-Address
@@ -70,7 +45,6 @@ func etherWake(hostMAC string) {
 	for ; currentByte < 6; currentByte++ {
 		magicPacket[currentByte] = 255
 	}
-
 	// fill the rest of the 102 bytes with the MAC (16 times)
 	for k := 0; k < 16; k++ {
 		for j := range macAddress {
@@ -85,11 +59,11 @@ func etherWake(hostMAC string) {
 		IP:   broadcastIPv4,
 		Port: 7,
 	})
-
 	if err != nil {
 		log.Fatal("OMG is br0k:", err)
 	}
 
+	// send the packet to the wire
 	packetLength, err := socket.Write(magicPacket)
 	if err != nil {
 		log.Fatal("OMG", err)
@@ -99,4 +73,86 @@ func etherWake(hostMAC string) {
 	}
 
 	fmt.Println("Sent wol magic packet for: ", macAddress)
+}
+
+func checksum(packet []byte) uint16 {
+	length := len(packet)
+	var index int
+	var sum uint32
+	for length > 1 {
+		sum += uint32(packet[index])<<8 + uint32(packet[index+1])
+		index += 2
+		length -= 2
+	}
+	if length > 0 {
+		sum += uint32(packet[index])
+	}
+	// calculate the 17th bit, add it back into the LSb
+	sum += (sum >> 16)
+	return uint16(^sum)
+}
+
+// fetches the payload from an ipv4 packet
+func getPayload(b []byte) []byte {
+	// IP Header should have 20 bytes
+	if len(b) < 20 {
+		return b
+	}
+	headerLength := int(b[0]&0x0f) << 2
+
+	return b[headerLength:]
+}
+func getICMPHeader(b []byte) []byte {
+	return b[20:28]
+}
+
+func buildICMPEchoRequest(id, seq, length int) []byte {
+	var buffer bytes.Buffer
+	var packet icmpMsg
+	var err error
+
+	packet.SequenceNo = uint16(seq)
+	packet.Identifier = uint16(id)
+	packet.Type = 8
+	packet.Code = 0
+
+	if err = binary.Write(&buffer, binary.BigEndian, packet); err != nil {
+		log.Fatalln("Error writing packet to buffer:", err)
+	}
+	packet.Checksum = checksum(buffer.Bytes())
+	buffer.Reset()
+	if err = binary.Write(&buffer, binary.BigEndian, packet); err != nil {
+		log.Fatalln("Error writing packet to buffer:", err)
+	}
+
+	return buffer.Bytes()
+}
+
+// checks if the Host is alive after we've sent a
+// magic packet
+func checkHost(host string) bool {
+	success := false
+	var err error
+	var connection net.Conn
+
+	send := buildICMPEchoRequest(ident&0xffff, 1, 64)
+
+	//icmps, err := net.DialIP("ip4:icmp", nil, raddr)
+	connection, err = net.Dial("ip4:icmp", host)
+	_, err = connection.Write(send)
+	if err != nil {
+		log.Fatalln("Fuck:", err)
+	}
+	fmt.Println("ping:", host)
+	fmt.Println("sent ID:", int(send[4])<<8|int(send[5]))
+
+	// from here on we want to receive the icmp echo reply
+	icmpReply := make([]byte, 64)
+	_, err = connection.Read(icmpReply)
+
+	recv := getPayload(icmpReply)
+
+	fmt.Println("received ID:", int(recv[4])<<8|int(recv[5]))
+	fmt.Println("pong:", host)
+	return success
 }
