@@ -4,18 +4,34 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"html/template"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
+	"strings"
+	"time"
+)
+
+const (
+	tlsKey = "ssl/localhost.key"
+	tlsCRT = "ssl/localhost.crt"
 )
 
 var ident int
 var listenPort int
+var stopPing = make(chan bool)
+var running bool
 
 type icmpMsg struct {
 	Type, Code                       uint8
 	Checksum, Identifier, SequenceNo uint16
+}
+
+type page struct {
+	Title string
+	Body  []byte
 }
 
 type host struct {
@@ -29,18 +45,21 @@ func init() {
 }
 
 func main() {
-	http.HandleFunc("/wake", etherWake)
-	http.HandleFunc("/ping", checkHost)
+	running = false
+
+	pingeling := func() { checkHost(strings.TrimSpace("127.0.0.1")) }
+	stopPing = pingScheduler(pingeling, 60*time.Second)
+
 	http.HandleFunc("/", doRest)
-	http.ListenAndServe("0.0.0.0:8080", nil)
+	http.ListenAndServeTLS("localhost:443", tlsCRT, tlsKey, nil)
+
 }
 
 // sends a magic packet to a given MAC-Address
 // this is a pretty basic implementation of WOL
 // no support for directed broadcasts etc
-func etherWake( /*hostMAC string*/ w http.ResponseWriter, r *http.Request) {
-	var hostMAC string
-	hostMAC = string(r.URL.Query().Get("mac"))
+func etherWake(hostMAC string) {
+	running = true
 	magicPacket := make([]byte, 102)
 	macAddress, err := net.ParseMAC(hostMAC)
 
@@ -76,7 +95,7 @@ func etherWake( /*hostMAC string*/ w http.ResponseWriter, r *http.Request) {
 	if packetLength != 102 {
 		log.Println("Weird, packet length not the expected 102: ", packetLength)
 	}
-	fmt.Fprintf(w, "magic packet sent to: %v\n", macAddress)
+	fmt.Printf("magic packet sent to: %v\n", macAddress)
 }
 
 func checksum(packet []byte) uint16 {
@@ -131,13 +150,11 @@ func buildICMPEchoRequest(id, seq, length int) []byte {
 
 // checks if the Host is alive after we've sent a
 // magic packet
-func checkHost( /*host string*/ w http.ResponseWriter, r *http.Request) {
+func checkHost(host string) bool {
 	var err error
 	var connection net.Conn
-	var host string
-	host = string(r.URL.Query().Get("host"))
-
-	send := buildICMPEchoRequest(ident&0xffff, 1, 64)
+	online := false
+	send := buildICMPEchoRequest((rand.Int()*ident)&0xffff, 1, 64)
 
 	//icmps, err := net.DialIP("ip4:icmp", nil, raddr)
 	connection, err = net.Dial("ip4:icmp", host)
@@ -145,16 +162,56 @@ func checkHost( /*host string*/ w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatalln("Fuck:", err)
 	}
-	fmt.Fprintf(w, "received ID: %v\n", int(send[4])<<8|int(send[5]))
+	fmt.Printf("sent ID: %v\n", int(send[4])<<8|int(send[5]))
+	sending := int(send[4])<<8 | int(send[5])
 
 	// from here on we want to receive the icmp echo reply
 	icmpReply := make([]byte, 64)
 	_, err = connection.Read(icmpReply)
 
 	recv := getPayload(icmpReply)
-	fmt.Fprintf(w, "received ID: %v", int(recv[4])<<8|int(recv[5]))
+	fmt.Printf("received ID: %v\n", int(recv[4])<<8|int(recv[5]))
+	receiving := int(recv[4])<<8 | int(recv[5])
+
+	if sending == receiving {
+		online = true
+	}
+	return online
+}
+
+func pingScheduler(pinger func(), delay time.Duration) chan bool {
+	stop := make(chan bool)
+	go func() {
+		for {
+			pinger()
+			select {
+			case <-time.After(delay):
+			case <-stop:
+				fmt.Println("stopping pinger")
+				return
+			}
+		}
+	}()
+	return stop
 }
 
 func doRest(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "foobar")
+	mac := string(r.PostFormValue("mac"))
+	starter := r.PostFormValue("starter")
+	stopper := r.PostFormValue("stopper")
+	if mac == "" {
+		mac = "FF:FF:FF:FF:FF:FF"
+	}
+	if starter == "start" {
+		if !running {
+			etherWake(mac)
+		}
+	}
+	if stopper == "stop" {
+		stopPing <- true
+		running = false
+	}
+	p := &page{Title: "Wake on Lan Service"}
+	t, _ := template.ParseFiles("assets/html/index.html")
+	t.Execute(w, p)
 }
