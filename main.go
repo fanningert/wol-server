@@ -1,3 +1,8 @@
+//
+// wol-server is a simple go web app to check if
+// the workstations in our office are on, and if not
+// allow the viewer to turn them on via wake on lan
+//
 package main
 
 import (
@@ -11,9 +16,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	//"os"
-	//"runtime"
-	"strings"
+	"os"
 	"time"
 )
 
@@ -26,12 +29,12 @@ type workstation struct {
 	MAC   string
 	Alive bool
 }
+type tomlConfig struct {
+	Workstations map[string]workstation
+}
 type icmpMsg struct {
 	Type, Code                       uint8
 	Checksum, Identifier, SequenceNo uint16
-}
-type tomlConfig struct {
-	Workstations map[string]workstation
 }
 
 var configFile = "config.toml"
@@ -40,8 +43,7 @@ var ident int
 var stopPing = make(chan bool)
 
 func init() {
-	ident = 1
-	//runtime.GOMAXPROCS(2)
+	ident = os.Getpid()
 	if _, err := toml.DecodeFile(configFile, &hostConfig); err != nil {
 		log.Println(err)
 		log.Fatalln("couldnt read config file")
@@ -53,9 +55,6 @@ func init() {
 
 func main() {
 	go func() { pingWorker() }()
-	//pingeling := func() { pingWorker() }
-	//stopPing = pingScheduler(pingeling, 60*time.Second)
-
 	router := mux.NewRouter()
 	router.HandleFunc("/wake/{host}", wake).Methods("GET")
 	router.HandleFunc("/", index).Methods("GET")
@@ -82,11 +81,12 @@ func index(w http.ResponseWriter, r *http.Request) {
 	t.Execute(w, p)
 }
 
+// ping our workstations periodically, in the background
 func pingWorker() {
 	for {
 		time.Sleep(20 * time.Second)
 		for hostname := range hostConfig.Workstations {
-			hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(strings.TrimSpace(hostname)))
+			hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(hostname))
 		}
 		time.Sleep(40 * time.Second)
 	}
@@ -157,12 +157,12 @@ func buildICMPEchoRequest(id, seq, length int) []byte {
 	packet.Code = 0
 
 	if err = binary.Write(&buffer, binary.BigEndian, packet); err != nil {
-		log.Fatalln("Error writing packet to buffer:", err)
+		log.Printf("Error writing packet to buffer: %v\n", err)
 	}
 	packet.Checksum = checksum(buffer.Bytes())
 	buffer.Reset()
 	if err = binary.Write(&buffer, binary.BigEndian, packet); err != nil {
-		log.Fatalln("Error writing packet to buffer:", err)
+		log.Printf("Error writing packet to buffer: %v\n", err)
 	}
 
 	return buffer.Bytes()
@@ -179,22 +179,26 @@ func checkHost(host string) bool {
 	//icmps, err := net.DialIP("ip4:icmp", nil, raddr)
 	connection, err = net.Dial("ip4:icmp", host)
 	if err != nil {
-		log.Printf("Can't resolve: %s", host)
+		log.Printf("Can't resolve: %s\n", host)
 		return false
 	}
 	_, err = connection.Write(send)
 	if err != nil {
-		log.Fatalln("Fuck:", err)
+		log.Printf("Could not send to host: %s\n", host)
+		log.Printf("Error dump: %v\n", err)
 	}
-	fmt.Printf("sent ID: %v\n", int(send[4])<<8|int(send[5]))
+	//fmt.Printf("sent ID: %v\n", int(send[4])<<8|int(send[5]))
 	sending := int(send[4])<<8 | int(send[5])
 
 	// from here on we want to receive the icmp echo reply
 	icmpReply := make([]byte, 64)
 	_, err = connection.Read(icmpReply)
+	if err != nil {
+		log.Printf("Error dump: %v\n", err)
+	}
 
 	recv := getPayload(icmpReply)
-	fmt.Printf("received ID: %v\n", int(recv[4])<<8|int(recv[5]))
+	//fmt.Printf("received ID: %v\n", int(recv[4])<<8|int(recv[5]))
 	receiving := int(recv[4])<<8 | int(recv[5])
 
 	if sending == receiving {
@@ -229,16 +233,16 @@ func etherWake(hostMAC string) {
 		Port: 7,
 	})
 	if err != nil {
-		log.Fatal("OMG is br0k:", err)
+		log.Println("Could not open socket to broadcast ip")
+		log.Printf("Error dump: %v\n", err)
 	}
 
 	// sewake/vaih-workstation-16nd the packet to the wire
 	packetLength, err := socket.Write(magicPacket)
 	if err != nil {
-		log.Fatal("OMG", err)
+		log.Printf("Could not send magic packet: %v\n", err)
 	}
 	if packetLength != 102 {
-		log.Println("Weird, packet length not the expected 102: ", packetLength)
+		log.Printf("Weird, packet length not the expected 102: %d", packetLength)
 	}
-	fmt.Printf("magic packet sent for: %v\n", macAddress)
 }
