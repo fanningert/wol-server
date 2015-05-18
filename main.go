@@ -4,98 +4,118 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/BurntSushi/toml"
+	"github.com/gorilla/mux"
 	"html/template"
 	"log"
 	"math/rand"
 	"net"
 	"net/http"
-	"os"
+	//"os"
+	//"runtime"
 	"strings"
 	"time"
 )
 
-const (
-	tlsKey = "ssl/localhost.key"
-	tlsCRT = "ssl/localhost.crt"
-)
-
-var ident int
-var listenPort int
-var stopPing = make(chan bool)
-var running bool
-
+type indexPage struct {
+	Title string
+	Hosts tomlConfig
+}
+type workstation struct {
+	IP    string
+	MAC   string
+	Alive bool
+}
 type icmpMsg struct {
 	Type, Code                       uint8
 	Checksum, Identifier, SequenceNo uint16
 }
-
-type page struct {
-	Title string
-	Body  []byte
+type tomlConfig struct {
+	Workstations map[string]workstation
 }
 
-type host struct {
-	name      string
-	ip        string
-	hwaddress string
-}
+var configFile = "config.toml"
+var hostConfig tomlConfig
+var ident int
+var stopPing = make(chan bool)
 
 func init() {
-	ident = os.Getpid()
+	ident = 1
+	//runtime.GOMAXPROCS(2)
+	if _, err := toml.DecodeFile(configFile, &hostConfig); err != nil {
+		log.Println(err)
+		log.Fatalln("couldnt read config file")
+	}
+	for hostname := range hostConfig.Workstations {
+		hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], false)
+	}
 }
 
 func main() {
-	running = false
+	go func() { pingWorker() }()
+	//pingeling := func() { pingWorker() }
+	//stopPing = pingScheduler(pingeling, 60*time.Second)
 
-	pingeling := func() { checkHost(strings.TrimSpace("127.0.0.1")) }
-	stopPing = pingScheduler(pingeling, 60*time.Second)
-
-	http.HandleFunc("/", doRest)
-	http.ListenAndServeTLS("localhost:443", tlsCRT, tlsKey, nil)
+	router := mux.NewRouter()
+	router.HandleFunc("/wake/{host}", wake).Methods("GET")
+	router.HandleFunc("/", index).Methods("GET")
+	http.ListenAndServe(":8070", router)
 
 }
 
-// sends a magic packet to a given MAC-Address
-// this is a pretty basic implementation of WOL
-// no support for directed broadcasts etc
-func etherWake(hostMAC string) {
-	running = true
-	magicPacket := make([]byte, 102)
-	macAddress, err := net.ParseMAC(hostMAC)
-
-	// filling the first part of the magic packet with
-	// FF (6 bytes)
-	currentByte := 0
-	for ; currentByte < 6; currentByte++ {
-		magicPacket[currentByte] = 255
+func wake(w http.ResponseWriter, r *http.Request) {
+	host := mux.Vars(r)["host"]
+	if hostConfig.Workstations[host].MAC != "" {
+		etherWake(hostConfig.Workstations[host].MAC)
 	}
-	// fill the rest of the 102 bytes with the MAC (16 times)
-	for k := 0; k < 16; k++ {
-		for j := range macAddress {
-			magicPacket[currentByte] = macAddress[j]
-			currentByte++
+	hostConfig.Workstations[host] = changeAliveness(hostConfig.Workstations[host], true)
+	w.Header().Set("X-WakeOnLan", host)
+	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+
+}
+
+// simple function to render the index.html page
+func index(w http.ResponseWriter, r *http.Request) {
+	p := &indexPage{Title: "WAAS", Hosts: hostConfig}
+	t := template.New("index.tmpl")
+	t = template.Must(t.ParseGlob("templates/*.tmpl"))
+	t.Execute(w, p)
+}
+
+func pingWorker() {
+	for {
+		time.Sleep(20 * time.Second)
+		for hostname := range hostConfig.Workstations {
+			hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(strings.TrimSpace(hostname)))
 		}
+		time.Sleep(40 * time.Second)
 	}
+}
 
-	// open a socket towards the broadcast address
-	broadcastIPv4 := net.IPv4(255, 255, 255, 255)
-	socket, err := net.DialUDP("udp4", nil, &net.UDPAddr{
-		IP:   broadcastIPv4,
-		Port: 7,
-	})
-	if err != nil {
-		log.Fatal("OMG is br0k:", err)
-	}
+// work around the fact that maps aren't adressable https://github.com/golang/go/issues/3117
+func changeAliveness(gostinkt workstation, isAlive bool) workstation {
+	gostinkt.Alive = isAlive
+	return gostinkt
+}
 
-	// send the packet to the wire
-	packetLength, err := socket.Write(magicPacket)
-	if err != nil {
-		log.Fatal("OMG", err)
-	}
-	if packetLength != 102 {
-		log.Println("Weird, packet length not the expected 102: ", packetLength)
-	}
-	fmt.Printf("magic packet sent to: %v\n", macAddress)
+//
+//	Network related functions
+//
+
+func pingScheduler(pinger func(), delay time.Duration) chan bool {
+	stop := make(chan bool)
+	go func() {
+		for {
+			pinger()
+			select {
+			case <-time.After(delay):
+			case <-stop:
+				fmt.Println("stopping pinger")
+				return
+			}
+		}
+	}()
+	return stop
 }
 
 func checksum(packet []byte) uint16 {
@@ -158,6 +178,10 @@ func checkHost(host string) bool {
 
 	//icmps, err := net.DialIP("ip4:icmp", nil, raddr)
 	connection, err = net.Dial("ip4:icmp", host)
+	if err != nil {
+		log.Printf("Can't resolve: %s", host)
+		return false
+	}
 	_, err = connection.Write(send)
 	if err != nil {
 		log.Fatalln("Fuck:", err)
@@ -179,39 +203,42 @@ func checkHost(host string) bool {
 	return online
 }
 
-func pingScheduler(pinger func(), delay time.Duration) chan bool {
-	stop := make(chan bool)
-	go func() {
-		for {
-			pinger()
-			select {
-			case <-time.After(delay):
-			case <-stop:
-				fmt.Println("stopping pinger")
-				return
-			}
-		}
-	}()
-	return stop
-}
+// sends a wake on lan package to the specified MAC address
+func etherWake(hostMAC string) {
+	magicPacket := make([]byte, 102)
+	macAddress, err := net.ParseMAC(hostMAC)
 
-func doRest(w http.ResponseWriter, r *http.Request) {
-	mac := string(r.PostFormValue("mac"))
-	starter := r.PostFormValue("starter")
-	stopper := r.PostFormValue("stopper")
-	if mac == "" {
-		mac = "FF:FF:FF:FF:FF:FF"
+	// filling the first part of the magic packet with
+	// FF (6 bytes)
+	currentByte := 0
+	for ; currentByte < 6; currentByte++ {
+		magicPacket[currentByte] = 255
 	}
-	if starter == "start" {
-		if !running {
-			etherWake(mac)
+	// fill the rest of the 102 bytes with the MAC (16 times)
+	for k := 0; k < 16; k++ {
+		for j := range macAddress {
+			magicPacket[currentByte] = macAddress[j]
+			currentByte++
 		}
 	}
-	if stopper == "stop" {
-		stopPing <- true
-		running = false
+
+	// open a socket towards the broadcast address
+	broadcastIPv4 := net.IPv4(255, 255, 255, 255)
+	socket, err := net.DialUDP("udp4", nil, &net.UDPAddr{
+		IP:   broadcastIPv4,
+		Port: 7,
+	})
+	if err != nil {
+		log.Fatal("OMG is br0k:", err)
 	}
-	p := &page{Title: "Wake on Lan Service"}
-	t, _ := template.ParseFiles("assets/html/index.html")
-	t.Execute(w, p)
+
+	// sewake/vaih-workstation-16nd the packet to the wire
+	packetLength, err := socket.Write(magicPacket)
+	if err != nil {
+		log.Fatal("OMG", err)
+	}
+	if packetLength != 102 {
+		log.Println("Weird, packet length not the expected 102: ", packetLength)
+	}
+	fmt.Printf("magic packet sent for: %v\n", macAddress)
 }

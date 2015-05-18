@@ -1,0 +1,7 @@
+{{ template "header" }}
+			<div>
+				{{ range $name, $data := .Hosts.Workstations }}
+				<a style="{{ if $data.Alive}}color:green;{{ else }} color:red;{{ end }}"href="wake/{{ $name }}">{{ $name }}</a><br />	
+				{{ end }}
+			</div>
+{{ template "footer" }}
