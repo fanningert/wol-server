@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/gorilla/mux"
@@ -37,12 +38,16 @@ type icmpMsg struct {
 	Checksum, Identifier, SequenceNo uint16
 }
 
-var configFile = "config.toml"
+var configFile string
+var listenPort string
 var hostConfig tomlConfig
 var ident int
 var stopPing = make(chan bool)
 
 func init() {
+	flag.StringVar(&configFile, "configFile", "/opt/waas/config.toml", "config file location")
+	flag.StringVar(&listenPort, "listenPort", "8080", "port to listen on")
+	flag.Parse()
 	ident = os.Getpid()
 	if _, err := toml.DecodeFile(configFile, &hostConfig); err != nil {
 		log.Println(err)
@@ -58,7 +63,7 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/wake/{host}", wake).Methods("GET")
 	router.HandleFunc("/", index).Methods("GET")
-	http.ListenAndServe(":8070", router)
+	http.ListenAndServe(":"+listenPort, router)
 
 }
 
@@ -186,6 +191,7 @@ func checkHost(host string) bool {
 	if err != nil {
 		log.Printf("Could not send to host: %s\n", host)
 		log.Printf("Error dump: %v\n", err)
+		return false
 	}
 	//fmt.Printf("sent ID: %v\n", int(send[4])<<8|int(send[5]))
 	sending := int(send[4])<<8 | int(send[5])
@@ -195,6 +201,7 @@ func checkHost(host string) bool {
 	_, err = connection.Read(icmpReply)
 	if err != nil {
 		log.Printf("Error dump: %v\n", err)
+		return false
 	}
 
 	recv := getPayload(icmpReply)
