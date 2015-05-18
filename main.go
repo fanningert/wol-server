@@ -39,6 +39,7 @@ type icmpMsg struct {
 }
 
 var configFile string
+var templateDir string
 var listenPort string
 var hostConfig tomlConfig
 var ident int
@@ -46,6 +47,7 @@ var stopPing = make(chan bool)
 
 func init() {
 	flag.StringVar(&configFile, "configFile", "/opt/waas/config.toml", "config file location")
+	flag.StringVar(&templateDir, "templateDir", "/usr/share/waas/templates/", "template file directory")
 	flag.StringVar(&listenPort, "listenPort", "8080", "port to listen on")
 	flag.Parse()
 	ident = os.Getpid()
@@ -82,7 +84,7 @@ func wake(w http.ResponseWriter, r *http.Request) {
 func index(w http.ResponseWriter, r *http.Request) {
 	p := &indexPage{Title: "WAAS", Hosts: hostConfig}
 	t := template.New("index.tmpl")
-	t = template.Must(t.ParseGlob("templates/*.tmpl"))
+	t = template.Must(t.ParseGlob(templateDir + "/*.tmpl"))
 	t.Execute(w, p)
 }
 
