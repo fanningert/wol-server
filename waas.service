@@ -3,7 +3,7 @@ Description=Wake on Lan Service
 
 [Service]
 TimeoutStartSec=0
-ExecStart=/opt/waas/wol-server -configFile=/opt/waas/config.toml -listenPort=80
+ExecStart=/usr/sbin/wol-server -configFile=/etc/waas/config.toml -listenPort=80
 
 [Install]
 WantedBy=multi-user.target
