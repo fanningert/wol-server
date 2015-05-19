@@ -91,11 +91,10 @@ func index(w http.ResponseWriter, r *http.Request) {
 // ping our workstations periodically, in the background
 func pingWorker() {
 	for {
-		time.Sleep(20 * time.Second)
 		for hostname := range hostConfig.Workstations {
 			hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(hostname))
 		}
-		time.Sleep(40 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }
 
@@ -180,13 +179,12 @@ func buildICMPEchoRequest(id, seq, length int) []byte {
 func checkHost(host string) bool {
 	var err error
 	var connection net.Conn
-	online := false
 	send := buildICMPEchoRequest((rand.Int()*ident)&0xffff, 1, 64)
 
 	//icmps, err := net.DialIP("ip4:icmp", nil, raddr)
 	connection, err = net.Dial("ip4:icmp", host)
 	if err != nil {
-		log.Printf("Can't resolve: %s\n", host)
+		log.Printf("Catch all possible errors #yolo: %v\n", err)
 		return false
 	}
 	_, err = connection.Write(send)
@@ -195,25 +193,34 @@ func checkHost(host string) bool {
 		log.Printf("Error dump: %v\n", err)
 		return false
 	}
-	//fmt.Printf("sent ID: %v\n", int(send[4])<<8|int(send[5]))
-	sending := int(send[4])<<8 | int(send[5])
+	online := make(chan bool, 1)
+	go func() {
+		sending := int(send[4])<<8 | int(send[5])
 
-	// from here on we want to receive the icmp echo reply
-	icmpReply := make([]byte, 64)
-	_, err = connection.Read(icmpReply)
-	if err != nil {
-		log.Printf("Error dump: %v\n", err)
+		// from here on we want to receive the icmp echo reply
+		icmpReply := make([]byte, 64)
+		_, err = connection.Read(icmpReply)
+		if err != nil {
+			log.Printf("Error dump: %v\n", err)
+			online <- false
+		}
+
+		recv := getPayload(icmpReply)
+		receiving := int(recv[4])<<8 | int(recv[5])
+		//fmt.Printf("received ID: %v\n", receiving)
+
+		if sending == receiving {
+			online <- true
+		}
+
+	}()
+	select {
+	case <-online:
+		return true
+	case <-time.After(time.Second * 2):
 		return false
 	}
 
-	recv := getPayload(icmpReply)
-	//fmt.Printf("received ID: %v\n", int(recv[4])<<8|int(recv[5]))
-	receiving := int(recv[4])<<8 | int(recv[5])
-
-	if sending == receiving {
-		online = true
-	}
-	return online
 }
 
 // sends a wake on lan package to the specified MAC address
