@@ -12,12 +12,15 @@ import (
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/gorilla/mux"
+	"github.com/mailgun/manners"
 	"html/template"
 	"log"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -61,11 +64,20 @@ func init() {
 }
 
 func main() {
+	// handle sigterm/kill/interrupt
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigs
+		fmt.Println(sig)
+		manners.Close()
+	}()
+
 	go func() { pingWorker() }()
 	router := mux.NewRouter()
 	router.HandleFunc("/wake/{host}", wake).Methods("GET")
 	router.HandleFunc("/", index).Methods("GET")
-	http.ListenAndServe(":"+listenPort, router)
+	manners.ListenAndServe(":"+listenPort, router)
 
 }
 
@@ -107,22 +119,6 @@ func changeAliveness(gostinkt workstation, isAlive bool) workstation {
 //
 //	Network related functions
 //
-
-func pingScheduler(pinger func(), delay time.Duration) chan bool {
-	stop := make(chan bool)
-	go func() {
-		for {
-			pinger()
-			select {
-			case <-time.After(delay):
-			case <-stop:
-				fmt.Println("stopping pinger")
-				return
-			}
-		}
-	}()
-	return stop
-}
 
 func checksum(packet []byte) uint16 {
 	length := len(packet)
