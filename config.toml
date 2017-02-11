@@ -1,6 +1,7 @@
 [core]
 Address = ":8080"
 ExternalURL = ""
+WebPrefix = "/"
 TemplateDir = "./templates/"
 
 [core.html]

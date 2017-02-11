@@ -37,6 +37,7 @@ type workstation struct {
 type appConfig struct {
 	Address     string
 	ExternalURL string
+	WebPrefix   string
 	TemplateDir string
 	HTML        appConfigHTML
 }
@@ -75,10 +76,9 @@ func init() {
 	templateDir = hostConfig.Core.TemplateDir
 	externalURL = hostConfig.Core.ExternalURL
 	listenAddress = hostConfig.Core.Address
+	webPrefix = hostConfig.Core.WebPrefix
 
-	if len(externalURL) > 0 {
-		webPrefix = externalURL
-	} else {
+	if len(webPrefix) == 0 {
 		webPrefix = "/"
 	}
 }
@@ -95,7 +95,7 @@ func main() {
 
 	go func() { pingWorker() }()
 	router := mux.NewRouter()
-	router.HandleFunc(webPrefix+"/wake/{host}", wake).Methods("GET")
+	router.HandleFunc(webPrefix+"wake/{host}", wake).Methods("GET")
 	router.HandleFunc(webPrefix, index).Methods("GET")
 	manners.ListenAndServe(listenAddress, router)
 
