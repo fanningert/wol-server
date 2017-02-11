@@ -1,6 +1,5 @@
 [core]
 Address = ":8080"
-ExternalURL = ""
 WebPrefix = "/"
 TemplateDir = "./templates/"
 
@@ -10,9 +9,11 @@ Title = "Go WakeOnLan server"
 [workstations]
 
 [workstations.vaih-workstation-1]
+NAME = "VAIH-Workstation-1"
 MAC = "14:da:e9:de:d5:0b"
 IP = "100.126.240.33"
 
 [workstations.vaih-workstation-2]
+NAME = "VAIH-Workstation-2"
 IP = "100.126.240.34"
 MAC = "14:da:e9:de:d6:30"

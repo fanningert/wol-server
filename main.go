@@ -30,13 +30,13 @@ type indexPage struct {
 	Hosts tomlConfig
 }
 type workstation struct {
+	NAME  string
 	IP    string
 	MAC   string
 	Alive bool
 }
 type appConfig struct {
 	Address     string
-	ExternalURL string
 	WebPrefix   string
 	TemplateDir string
 	HTML        appConfigHTML
@@ -56,7 +56,6 @@ type icmpMsg struct {
 var configFile string
 var templateDir string
 var listenAddress string
-var externalURL string
 var webPrefix string
 var hostConfig tomlConfig
 var ident int
@@ -74,7 +73,6 @@ func init() {
 		hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], false)
 	}
 	templateDir = hostConfig.Core.TemplateDir
-	externalURL = hostConfig.Core.ExternalURL
 	listenAddress = hostConfig.Core.Address
 	webPrefix = hostConfig.Core.WebPrefix
 
@@ -123,8 +121,8 @@ func index(w http.ResponseWriter, r *http.Request) {
 // ping our workstations periodically, in the background
 func pingWorker() {
 	for {
-		for hostname := range hostConfig.Workstations {
-			hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(hostname))
+		for hostname, data := range hostConfig.Workstations {
+			hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(hostname, data.IP))
 		}
 		time.Sleep(60 * time.Second)
 	}
@@ -192,7 +190,7 @@ func buildICMPEchoRequest(id, seq, length int) []byte {
 
 // checks if the Host is alive after we've sent a
 // magic packet
-func checkHost(host string) bool {
+func checkHost(host string, ipString string) bool {
 	var err error
 	var connection net.Conn
 	send := buildICMPEchoRequest((rand.Int()*ident)&0xffff, 1, 64)
