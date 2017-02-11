@@ -44,6 +44,7 @@ type icmpMsg struct {
 var configFile string
 var templateDir string
 var listen string
+var remoteRoot string
 var hostConfig tomlConfig
 var ident int
 var stopPing = make(chan bool)
@@ -52,7 +53,7 @@ func init() {
 	flag.StringVar(&configFile, "configFile", "/opt/waas/config.toml", "config file location")
 	flag.StringVar(&templateDir, "templateDir", "/usr/share/waas/templates/", "template file directory")
         flag.StringVar(&listen, "listen", ":8080", "port to listen on")
-        flag.StringVar(&remoteRoot, "listen", "/", "port to listen on")
+        flag.StringVar(&remoteRoot, "remoteRoot", "/", "Remote root")
 	flag.Parse()
 	ident = os.Getpid()
 	if _, err := toml.DecodeFile(configFile, &hostConfig); err != nil {
