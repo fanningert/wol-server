@@ -95,6 +95,7 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc(webPrefix+"wake/{host}", wake).Methods("GET")
 	router.HandleFunc(webPrefix, index).Methods("GET")
+	router.PathPrefix(webPrefix + "static/").Handler(http.StripPrefix(webPrefix+"static/", http.FileServer(http.Dir(hostConfig.Core.TemplateDir+"static"))))
 	manners.ListenAndServe(listenAddress, router)
 
 }
