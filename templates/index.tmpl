@@ -1,7 +1,37 @@
-{{ template "header" }}
-			<div>
-				{{ range $name, $data := .Hosts.Workstations }}
-				<a style="color:{{ if $data.Alive}} green;{{ else }} red;{{ end }}"href="wake/{{ $name }}">{{ $data.NAME }}</a><br />
-				{{ end }}
+<!doctype html>
+<html lang="en">
+	<header>
+		<meta charset="utf-8">
+		<meta name="description" content="wake on lan as a service, not!">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		
+		<link rel="stylesheet" href="static/css/main.css" />
+		
+		<title>{{ .Title }}</title>
+	<header>
+	<body>
+		<div id="page-wrapper">
+			<!-- Header -->
+			<div id="header">
+				<!-- Inner -->
+				<div class="inner">
+					<header>
+						 <h1>{{ .Title }}</h1>
+					</header>
+				</div>
 			</div>
-{{ template "footer" }}
+
+			<!-- Nav -->
+			<nav id="nav">
+				<ul>
+					{{ range $name, $data := .Hosts.Workstations }}
+					<li style="color: {{ if $data.Alive}}green{{ else }}red{{ end }}">
+						<a href="wake/{{ $name }}">{{ $data.NAME }}</a>
+						{{ if $data.Alive}}<i class="fa fa-check-circle" aria-hidden="true"></i>{{ else }}<i class="fa fa-times-circle" aria-hidden="true"></i>{{ end }}
+					</li>
+					{{ end }}
+				</ul>
+			</nav>
+		</div>
+	</bod>
+</html>
