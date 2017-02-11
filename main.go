@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"flag"
-	"fmt"
 	"html/template"
 	"log"
 	"math/rand"
@@ -22,7 +21,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/gorilla/mux"
-	"github.com/mailgun/manners"
 )
 
 type indexPage struct {
@@ -51,6 +49,14 @@ type tomlConfig struct {
 type icmpMsg struct {
 	Type, Code                       uint8
 	Checksum, Identifier, SequenceNo uint16
+}
+
+type justFilesFilesystem struct {
+	fs http.FileSystem
+}
+
+type neuteredReaddirFile struct {
+	http.File
 }
 
 var configFile string
@@ -85,19 +91,36 @@ func main() {
 	// handle sigterm/kill/interrupt
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigs
-		fmt.Println(sig)
-		manners.Close()
-	}()
 
 	go func() { pingWorker() }()
 	router := mux.NewRouter()
 	router.HandleFunc(webPrefix+"wake/{host}", wake).Methods("GET")
 	router.HandleFunc(webPrefix, index).Methods("GET")
-	router.PathPrefix(webPrefix + "static/").Handler(http.StripPrefix(webPrefix+"static/", http.FileServer(http.Dir(hostConfig.Core.TemplateDir+"static"))))
-	manners.ListenAndServe(listenAddress, router)
 
+	fs := justFilesFilesystem{http.Dir(hostConfig.Core.TemplateDir + "static/")}
+	router.PathPrefix(webPrefix + "static/").Handler(http.StripPrefix(webPrefix+"static/", http.FileServer(fs)))
+
+	srv := &http.Server{
+		Handler: router,
+		Addr:    listenAddress,
+		// Good practice: enforce timeouts for servers you create!
+		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  15 * time.Second,
+	}
+
+	log.Fatal(srv.ListenAndServe())
+}
+
+func (fs justFilesFilesystem) Open(name string) (http.File, error) {
+	f, err := fs.fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return neuteredReaddirFile{f}, nil
+}
+
+func (f neuteredReaddirFile) Readdir(count int) ([]os.FileInfo, error) {
+	return nil, nil
 }
 
 func wake(w http.ResponseWriter, r *http.Request) {
