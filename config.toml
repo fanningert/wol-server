@@ -1,77 +1,17 @@
+[core]
+Address = ":8080"
+ExternalURL = ""
+TemplateDir = "./templates/"
+
+[core.html]
+Title = "Go WakeOnLan server"
+
 [workstations]
-	[workstations.vaih-workstation-1]
-	MAC = "14:da:e9:de:d5:0b"
-	IP = "100.126.240.33"
 
-	[workstations.vaih-workstation-2]
-	IP = "100.126.240.34"
-	MAC = "14:da:e9:de:d6:30"
+[workstations.vaih-workstation-1]
+MAC = "14:da:e9:de:d5:0b"
+IP = "100.126.240.33"
 
-	[workstations.vaih-workstation-3]
-	MAC = "54:04:a6:eb:15:9c"
-	IP = "100.126.240.35"
-
-	[workstations.vaih-workstation-4]
-	MAC = "c8:60:00:de:5b:60"
-	IP = "100.126.240.36"
-
-	[workstations.vaih-workstation-5]
-	MAC = "c8:60:00:de:5b:61"
-	IP = "100.126.240.37"
-
-	[workstations.vaih-workstation-6]
-	MAC = "00:22:41:28:26:bb"
-	IP = "100.126.240.38"
-
-	[workstations.vaih-workstation-7]
-	MAC = "14:da:e9:de:d5:75"
-	IP = "100.126.240.65"
-
-	[workstations.vaih-workstation-8]
-	IP = "100.126.240.66"
-	MAC = "14:da:e9:de:d5:7a"
-
-	[workstations.vaih-workstation-9]
-	IP = "100.126.240.67"
-	MAC = "14:da:e9:de:d5:09"
-
-	[workstations.vaih-workstation-10]
-	IP = "100.126.240.68"
-	MAC = "14:da:e9:de:d5:5c"
-
-	[workstations.vaih-workstation-11]
-	IP = "100.126.240.69"
-	MAC = "14:da:e9:de:d5:d4"
-
-	[workstations.vaih-workstation-12]
-	IP = "100.126.240.70"
-	MAC = "14:da:e9:de:d5:7e"
-
-	[workstations.vaih-workstation-13]
-	IP = "100.126.240.71"
-	MAC = "14:da:e9:de:d4:df"
-
-	[workstations.vaih-workstation-14]
-	IP = "100.126.240.72"
-	MAC = "14:da:e9:de:d6:27"
-
-	[workstations.vaih-workstation-15]
-	IP = "100.126.240.74"
-	MAC = "14:da:e9:de:d5:82"
-
-	[workstations.vaih-workstation-16]
-	IP = "100.126.240.75"
-	MAC = "14:da:e9:de:d4:e0"
-
-	[workstations.vaih-workstation-17]
-	IP = "100.126.240.77"
-	MAC = "14:da:e9:de:d5:55"
-
-	[workstations.vaih-workstation-18]
-	IP = "100.126.240.79"
-	MAC = "14:da:e9:de:d4:ed"
-
-	[workstations.vaih-workstation-19]
-	IP = "100.126.240.80"
-	MAC = "4c:72:b9:25:19:8d"
-
+[workstations.vaih-workstation-2]
+IP = "100.126.240.34"
+MAC = "14:da:e9:de:d6:30"

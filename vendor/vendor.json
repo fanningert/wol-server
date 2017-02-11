@@ -1,0 +1,24 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "hqDDDpue/5363luidNMBS8z8eJU=",
+			"path": "github.com/BurntSushi/toml",
+			"revision": "99064174e013895bbd9b025c31100bd1d9b590ca",
+			"revisionTime": "2016-07-17T15:07:09Z"
+		},
+		{
+			"checksumSHA1": "F5dR3/i70EhSIMZfeIV+H8/PtvM=",
+			"path": "github.com/gorilla/mux",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "h2+qSrhcD05p6/2uqmq3W/SNr4w=",
+			"path": "github.com/mailgun/manners",
+			"revision": "a585afd9d65c0e05f6c003f921e71ebc05074f4f",
+			"revisionTime": "2015-11-21T00:57:10Z"
+		}
+	],
+	"rootPath": "github.com/wol-server"
+}

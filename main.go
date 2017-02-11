@@ -10,9 +10,6 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"github.com/BurntSushi/toml"
-	"github.com/gorilla/mux"
-	"github.com/mailgun/manners"
 	"html/template"
 	"log"
 	"math/rand"
@@ -22,6 +19,10 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/BurntSushi/toml"
+	"github.com/gorilla/mux"
+	"github.com/mailgun/manners"
 )
 
 type indexPage struct {
@@ -33,7 +34,17 @@ type workstation struct {
 	MAC   string
 	Alive bool
 }
+type appConfig struct {
+	Address     string
+	ExternalURL string
+	TemplateDir string
+	HTML        appConfigHTML
+}
+type appConfigHTML struct {
+	Title string
+}
 type tomlConfig struct {
+	Core         appConfig
 	Workstations map[string]workstation
 }
 type icmpMsg struct {
@@ -43,17 +54,15 @@ type icmpMsg struct {
 
 var configFile string
 var templateDir string
-var listen string
-var remoteRoot string
+var listenAddress string
+var externalURL string
+var webPrefix string
 var hostConfig tomlConfig
 var ident int
 var stopPing = make(chan bool)
 
 func init() {
-	flag.StringVar(&configFile, "configFile", "/opt/waas/config.toml", "config file location")
-	flag.StringVar(&templateDir, "templateDir", "/usr/share/waas/templates/", "template file directory")
-        flag.StringVar(&listen, "listen", ":8080", "port to listen on")
-        flag.StringVar(&remoteRoot, "remoteRoot", "/", "Remote root")
+	flag.StringVar(&configFile, "config", "./config.toml", "config file location")
 	flag.Parse()
 	ident = os.Getpid()
 	if _, err := toml.DecodeFile(configFile, &hostConfig); err != nil {
@@ -62,6 +71,15 @@ func init() {
 	}
 	for hostname := range hostConfig.Workstations {
 		hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], false)
+	}
+	templateDir = hostConfig.Core.TemplateDir
+	externalURL = hostConfig.Core.ExternalURL
+	listenAddress = hostConfig.Core.Address
+
+	if len(externalURL) > 0 {
+		webPrefix = externalURL
+	} else {
+		webPrefix = "/"
 	}
 }
 
@@ -77,9 +95,9 @@ func main() {
 
 	go func() { pingWorker() }()
 	router := mux.NewRouter()
-	router.HandleFunc(remoteRoot+"wake/{host}", wake).Methods("GET")
-	router.HandleFunc(remoteRoot, index).Methods("GET")
-	manners.ListenAndServe(listen, router)
+	router.HandleFunc(webPrefix+"/wake/{host}", wake).Methods("GET")
+	router.HandleFunc(webPrefix, index).Methods("GET")
+	manners.ListenAndServe(listenAddress, router)
 
 }
 
@@ -90,13 +108,13 @@ func wake(w http.ResponseWriter, r *http.Request) {
 	}
 	hostConfig.Workstations[host] = changeAliveness(hostConfig.Workstations[host], true)
 	w.Header().Set("X-WakeOnLan", host)
-	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, webPrefix, http.StatusTemporaryRedirect)
 
 }
 
 // simple function to render the index.html page
 func index(w http.ResponseWriter, r *http.Request) {
-	p := &indexPage{Title: "WAAS", Hosts: hostConfig}
+	p := &indexPage{Title: hostConfig.Core.HTML.Title, Hosts: hostConfig}
 	t := template.New("index.tmpl")
 	t = template.Must(t.ParseGlob(templateDir + "/*.tmpl"))
 	t.Execute(w, p)
