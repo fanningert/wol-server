@@ -92,7 +92,7 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	go func() { pingWorker() }()
+	// go func() { pingWorker() }()
 	router := mux.NewRouter()
 	router.HandleFunc(webPrefix+"wake/{host}", wake).Methods("GET")
 	router.HandleFunc(webPrefix, index).Methods("GET")
@@ -136,6 +136,8 @@ func wake(w http.ResponseWriter, r *http.Request) {
 
 // simple function to render the index.html page
 func index(w http.ResponseWriter, r *http.Request) {
+	pingWorker()
+
 	p := &indexPage{Title: hostConfig.Core.HTML.Title, Hosts: hostConfig}
 	t := template.New("index.tmpl")
 	t = template.Must(t.ParseGlob(templateDir + "/*.tmpl"))
