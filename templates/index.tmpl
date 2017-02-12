@@ -26,8 +26,18 @@
 				<ul>
 					{{ range $name, $data := .Hosts.Workstations }}
 					<li style="color: {{ if $data.Alive}}green{{ else }}red{{ end }}">
-						<a href="wake/{{ $name }}">{{ $data.NAME }}</a> - <a href="{{ $data.LINK }}">Link</a>
-						{{ if $data.Alive}}<i class="fa fa-check-circle" aria-hidden="true"></i>{{ else }}<i class="fa fa-times-circle" aria-hidden="true"></i>{{ end }}
+						{{ if $data.Alive }}
+							<i class="fa fa-check-circle" aria-hidden="true"></i>
+							<span>{{ $data.NAME }}</span> - <a href="{{ $data.LINK }}">Link</a>
+						{{ else }}
+							<i class="fa fa-times-circle" aria-hidden="true"></i>
+							<a href="wake/{{ $name }}">{{ $data.NAME }}</a> - <span>Link</span>
+						{{ end }}
+						{{ if $data.Sended }}
+							<i class="fa fa-envelope" aria-hidden="true" title="Magic package sended"></i>	
+						{{ else }}
+							<i class="fa fa-envelope-o" aria-hidden="true" title="Magic package not sended"></i>
+						{{ end }}
 					</li>
 					{{ end }}
 				</ul>

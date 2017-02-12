@@ -27,11 +27,12 @@ type indexPage struct {
 	Hosts tomlConfig
 }
 type workstation struct {
-	NAME  string
-	IP    string
-	MAC   string
-	LINK  string
-	Alive bool
+	NAME   string
+	IP     string
+	MAC    string
+	LINK   string
+	Sended bool
+	Alive  bool
 }
 type appConfig struct {
 	Address     string
@@ -128,6 +129,7 @@ func wake(w http.ResponseWriter, r *http.Request) {
 	host := mux.Vars(r)["host"]
 	if hostConfig.Workstations[host].MAC != "" {
 		etherWake(hostConfig.Workstations[host].MAC)
+		changeSended(hostConfig.Workstations[host], true)
 	}
 	hostConfig.Workstations[host] = changeAliveness(hostConfig.Workstations[host], true)
 	w.Header().Set("X-WakeOnLan", host)
@@ -153,7 +155,16 @@ func pingWorker() {
 
 // work around the fact that maps aren't adressable https://github.com/golang/go/issues/3117
 func changeAliveness(gostinkt workstation, isAlive bool) workstation {
+	// Reset sended when the current value of isAlive is true and will change to false
+	if gostinkt.Alive == true && gostinkt.Alive != isAlive {
+		gostinkt.Sended = false
+	}
 	gostinkt.Alive = isAlive
+	return gostinkt
+}
+
+func changeSended(gostinkt workstation, isSended bool) workstation {
+	gostinkt.Sended = isSended
 	return gostinkt
 }
 
