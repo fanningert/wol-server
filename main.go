@@ -15,12 +15,11 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/gorilla/mux"
+	"github.com/robfig/cron"
 )
 
 type indexPage struct {
@@ -85,14 +84,14 @@ func init() {
 	if len(webPrefix) == 0 {
 		webPrefix = "/"
 	}
+
+	//Cron
+	c := cron.New()
+	c.AddFunc("@every 1m", func() { pingWorker() })
+	c.Start()
 }
 
 func main() {
-	// handle sigterm/kill/interrupt
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() { pingWorker() }()
 	router := mux.NewRouter()
 	router.HandleFunc(webPrefix+"wake/{host}", wake).Methods("GET")
 	router.HandleFunc(webPrefix, index).Methods("GET")
@@ -100,6 +99,7 @@ func main() {
 	fs := justFilesFilesystem{http.Dir(hostConfig.Core.TemplateDir + "static/")}
 	router.PathPrefix(webPrefix + "static/").Handler(http.StripPrefix(webPrefix+"static/", http.FileServer(fs)))
 
+	log.Println("Listen on: " + listenAddress)
 	srv := &http.Server{
 		Handler: router,
 		Addr:    listenAddress,
@@ -144,11 +144,9 @@ func index(w http.ResponseWriter, r *http.Request) {
 
 // ping our workstations periodically, in the background
 func pingWorker() {
-	for {
-		for hostname, data := range hostConfig.Workstations {
-			hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(hostname, data.IP))
-		}
-		time.Sleep(60 * time.Second)
+	log.Println("Ping hosts")
+	for hostname, data := range hostConfig.Workstations {
+		hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(hostname, data.IP))
 	}
 }
 
