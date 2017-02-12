@@ -116,13 +116,13 @@ func main() {
 
 	// Print some infos
 	colorPrint.Headline.Print("Listen on: ")
-	colorPrint.Default.Printf(hostConfig.Core.Address + "\n")
+	colorPrint.Default.Println(hostConfig.Core.Address)
 	colorPrint.Headline.Print("Scheduler: ")
-	colorPrint.Default.Printf(hostConfig.Core.Scheduler + "\n")
+	colorPrint.Default.Println(hostConfig.Core.Scheduler)
 	colorPrint.Headline.Print("WebPrefix: ")
-	colorPrint.Default.Printf(hostConfig.Core.WebPrefix + "\n")
+	colorPrint.Default.Println(hostConfig.Core.WebPrefix)
 	colorPrint.Headline.Print("Template directory: ")
-	colorPrint.Default.Printf(hostConfig.Core.TemplateDir + "\n")
+	colorPrint.Default.Println(hostConfig.Core.TemplateDir)
 
 	srv := &http.Server{
 		Handler: router,
@@ -166,7 +166,6 @@ func wake(w http.ResponseWriter, r *http.Request) {
 		etherWake(hostConfig.Workstations[host].MAC)
 	}
 	hostConfig.Workstations[host] = changeSended(hostConfig.Workstations[host], true)
-	hostConfig.Workstations[host] = changeAliveness(hostConfig.Workstations[host], true)
 	w.Header().Set("X-WakeOnLan", host)
 	http.Redirect(w, r, hostConfig.Core.WebPrefix, http.StatusTemporaryRedirect)
 
