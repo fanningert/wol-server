@@ -26,7 +26,7 @@
 				<ul>
 					{{ range $name, $data := .Hosts.Workstations }}
 					<li style="color: {{ if $data.Alive}}green{{ else }}red{{ end }}">
-						<a href="wake/{{ $name }}">{{ $data.NAME }}</a>
+						<a href="wake/{{ $name }}">{{ $data.NAME }}</a> - <a href="{{ $data.LINK }}">Link</a>
 						{{ if $data.Alive}}<i class="fa fa-check-circle" aria-hidden="true"></i>{{ else }}<i class="fa fa-times-circle" aria-hidden="true"></i>{{ end }}
 					</li>
 					{{ end }}
