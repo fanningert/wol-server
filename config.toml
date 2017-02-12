@@ -2,7 +2,7 @@
 Address = "127.0.0.1:8080"
 WebPrefix = "/"
 TemplateDir = "./templates/"
-Scheduler = 1m
+Scheduler = "1m"
 
 [core.html]
 Title = "Go WakeOnLan server"

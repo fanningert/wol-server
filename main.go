@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"flag"
 	"html/template"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/fatih/color"
 	"github.com/gorilla/mux"
 	"github.com/robfig/cron"
 )
@@ -61,18 +61,33 @@ type neuteredReaddirFile struct {
 	http.File
 }
 
+type colorLog struct {
+	Error    color.Color
+	Warning  color.Color
+	Info     color.Color
+	Headline color.Color
+	InfoBold color.Color
+	Default  color.Color
+}
+
 var configFile string
 var hostConfig tomlConfig
 var ident int
 var stopPing = make(chan bool)
+var colorPrint colorLog
 
 func init() {
+	colorPrint.Headline.Add(color.Bold)
+	colorPrint.Error.Add(color.FgRed)
+	colorPrint.Warning.Add(color.FgYellow)
+	colorPrint.Info.Add(color.FgCyan)
+	colorPrint.InfoBold.Add(color.FgCyan).Add(color.Bold)
+
 	flag.StringVar(&configFile, "config", "./config.toml", "config file location")
 	flag.Parse()
 	ident = os.Getpid()
 	if _, err := toml.DecodeFile(configFile, &hostConfig); err != nil {
-		log.Println(err)
-		log.Fatalln("couldnt read config file")
+		colorPrint.Error.Printf("couldnt read config file: %s", err)
 	}
 	for hostname := range hostConfig.Workstations {
 		hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], false)
@@ -83,27 +98,32 @@ func init() {
 	}
 
 	if len(hostConfig.Core.Scheduler) == 0 {
-		hostConfig.Core.Scheduler = "1m"
+		hostConfig.Core.Scheduler = "@every 1m"
+	} else {
+		hostConfig.Core.Scheduler = "@every " + hostConfig.Core.Scheduler
 	}
-
-	//Cron
-	c := cron.New()
-	log.Fatalln(c.AddFunc("@every "+hostConfig.Core.Scheduler, func() { pingWorker() }))
-	c.Start()
 }
 
 func main() {
+	var err error
+
 	router := mux.NewRouter()
 	router.HandleFunc(hostConfig.Core.WebPrefix+"wake/{host}", wake).Methods("GET")
 	router.HandleFunc(hostConfig.Core.WebPrefix, index).Methods("GET")
 
-	// Inital run, the next run is executed via cron
-	go func() { pingWorker() }()
-
 	fs := justFilesFilesystem{http.Dir(hostConfig.Core.TemplateDir + "static/")}
 	router.PathPrefix(hostConfig.Core.WebPrefix + "static/").Handler(http.StripPrefix(hostConfig.Core.WebPrefix+"static/", http.FileServer(fs)))
 
-	log.Println("Listen on: " + hostConfig.Core.Address)
+	// Print some infos
+	colorPrint.Headline.Print("Listen on: ")
+	colorPrint.Default.Printf(hostConfig.Core.Address + "\n")
+	colorPrint.Headline.Print("Scheduler: ")
+	colorPrint.Default.Printf(hostConfig.Core.Scheduler + "\n")
+	colorPrint.Headline.Print("WebPrefix: ")
+	colorPrint.Default.Printf(hostConfig.Core.WebPrefix + "\n")
+	colorPrint.Headline.Print("Template directory: ")
+	colorPrint.Default.Printf(hostConfig.Core.TemplateDir + "\n")
+
 	srv := &http.Server{
 		Handler: router,
 		Addr:    hostConfig.Core.Address,
@@ -112,7 +132,20 @@ func main() {
 		ReadTimeout:  15 * time.Second,
 	}
 
-	log.Fatalln(srv.ListenAndServe())
+	// Inital run, the next run is executed via cron
+	go func() { pingWorker() }()
+	//Cron
+	c := cron.New()
+	if err = c.AddFunc(hostConfig.Core.Scheduler, func() { pingWorker() }); err != nil {
+		colorPrint.Error.Printf("%v\n", err)
+	}
+	c.Start()
+
+	// Start http server
+	err = srv.ListenAndServe()
+	if err = srv.ListenAndServe(); err != nil {
+		colorPrint.Error.Printf("%v\n", err)
+	}
 }
 
 func (fs justFilesFilesystem) Open(name string) (http.File, error) {
@@ -149,7 +182,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 
 // ping our workstations periodically, in the background
 func pingWorker() {
-	log.Println("Ping hosts")
+	colorPrint.InfoBold.Println("Ping hosts")
 	for hostname, data := range hostConfig.Workstations {
 		hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], checkHost(hostname, data.IP))
 	}
@@ -213,12 +246,12 @@ func buildICMPEchoRequest(id, seq, length int) []byte {
 	packet.Code = 0
 
 	if err = binary.Write(&buffer, binary.BigEndian, packet); err != nil {
-		log.Printf("Error writing packet to buffer: %v\n", err)
+		colorPrint.Warning.Printf("Error writing packet to buffer: %v\n", err)
 	}
 	packet.Checksum = checksum(buffer.Bytes())
 	buffer.Reset()
 	if err = binary.Write(&buffer, binary.BigEndian, packet); err != nil {
-		log.Printf("Error writing packet to buffer: %v\n", err)
+		colorPrint.Warning.Printf("Error writing packet to buffer: %v\n", err)
 	}
 
 	return buffer.Bytes()
@@ -234,13 +267,13 @@ func checkHost(host string, ipString string) bool {
 	//icmps, err := net.DialIP("ip4:icmp", nil, raddr)
 	connection, err = net.Dial("ip4:icmp", host)
 	if err != nil {
-		log.Printf("Catch all possible errors #yolo: %v\n", err)
+		colorPrint.Warning.Printf("Catch all possible errors: %v\n", err)
 		return false
 	}
 	_, err = connection.Write(send)
 	if err != nil {
-		log.Printf("Could not send to host: %s\n", host)
-		log.Printf("Error dump: %v\n", err)
+		colorPrint.Warning.Printf("Could not send to host: %s\n", host)
+		colorPrint.Warning.Printf("Error dump: %v\n", err)
 		return false
 	}
 	online := make(chan bool, 1)
@@ -251,7 +284,7 @@ func checkHost(host string, ipString string) bool {
 		icmpReply := make([]byte, 64)
 		_, err = connection.Read(icmpReply)
 		if err != nil {
-			log.Printf("Error dump: %v\n", err)
+			colorPrint.Warning.Printf("Error dump: %v\n", err)
 			online <- false
 		}
 
@@ -299,16 +332,16 @@ func etherWake(hostMAC string) {
 		Port: 7,
 	})
 	if err != nil {
-		log.Println("Could not open socket to broadcast ip")
-		log.Printf("Error dump: %v\n", err)
+		colorPrint.Warning.Println("Could not open socket to broadcast ip")
+		colorPrint.Warning.Printf("Error dump: %v\n", err)
 	}
 
 	// sewake/vaih-workstation-16nd the packet to the wire
 	packetLength, err := socket.Write(magicPacket)
 	if err != nil {
-		log.Printf("Could not send magic packet: %v\n", err)
+		colorPrint.Warning.Printf("Could not send magic packet: %v\n", err)
 	}
 	if packetLength != 102 {
-		log.Printf("Weird, packet length not the expected 102: %d", packetLength)
+		colorPrint.Warning.Printf("Weird, packet length not the expected 102: %d", packetLength)
 	}
 }

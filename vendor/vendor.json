@@ -9,6 +9,12 @@
 			"revisionTime": "2016-07-17T15:07:09Z"
 		},
 		{
+			"checksumSHA1": "7oFpbmDfGobwKsFLIf6wMUvVoKw=",
+			"path": "github.com/fatih/color",
+			"revision": "5ec5d9d3c2cf82e9688b34e9bc27a94d616a7193",
+			"revisionTime": "2017-02-09T08:00:14Z"
+		},
+		{
 			"checksumSHA1": "IAm3FQJ8F1eP4aFmE1sGEjbxK2Y=",
 			"path": "github.com/gorilla/handlers",
 			"revision": "6d39a51b4b5238fb818fe7ee0d0527dc5bf16d07",
@@ -18,6 +24,12 @@
 			"checksumSHA1": "F5dR3/i70EhSIMZfeIV+H8/PtvM=",
 			"path": "github.com/gorilla/mux",
 			"revision": ""
+		},
+		{
+			"checksumSHA1": "I4njd26dG5hxFT2nawuByM4pxzY=",
+			"path": "github.com/mattn/go-colorable",
+			"revision": "5411d3eea5978e6cdc258b30de592b60df6aba96",
+			"revisionTime": "2017-02-10T17:28:01Z"
 		},
 		{
 			"checksumSHA1": "PphQA6j/DEDbg3WIsdBDYALOOYs=",
