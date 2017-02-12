@@ -1,12 +1,19 @@
 [core]
-Address = ":8080"
+Address = "127.0.0.1:8080"
 WebPrefix = "/"
 TemplateDir = "./templates/"
+Scheduler = 1m
 
 [core.html]
 Title = "Go WakeOnLan server"
 
 [workstations]
+
+[workstations.diskstation]
+NAME = "DSM413-Vienna"
+MAC = "00:11:32:1b:f4:b5"
+IP = "192.168.1.10"
+LINK = "https://dsm-vienna.fanninger.at"
 
 [workstations.vaih-workstation-1]
 NAME = "VAIH-Workstation-1"

@@ -38,6 +38,7 @@ type appConfig struct {
 	Address     string
 	WebPrefix   string
 	TemplateDir string
+	Scheduler   string
 	HTML        appConfigHTML
 }
 type appConfigHTML struct {
@@ -61,9 +62,6 @@ type neuteredReaddirFile struct {
 }
 
 var configFile string
-var templateDir string
-var listenAddress string
-var webPrefix string
 var hostConfig tomlConfig
 var ident int
 var stopPing = make(chan bool)
@@ -79,38 +77,42 @@ func init() {
 	for hostname := range hostConfig.Workstations {
 		hostConfig.Workstations[hostname] = changeAliveness(hostConfig.Workstations[hostname], false)
 	}
-	templateDir = hostConfig.Core.TemplateDir
-	listenAddress = hostConfig.Core.Address
-	webPrefix = hostConfig.Core.WebPrefix
 
-	if len(webPrefix) == 0 {
-		webPrefix = "/"
+	if len(hostConfig.Core.WebPrefix) == 0 {
+		hostConfig.Core.WebPrefix = "/"
+	}
+
+	if len(hostConfig.Core.Scheduler) == 0 {
+		hostConfig.Core.Scheduler = "1m"
 	}
 
 	//Cron
 	c := cron.New()
-	c.AddFunc("@every 1m", func() { pingWorker() })
+	log.Fatalln(c.AddFunc("@every "+hostConfig.Core.Scheduler, func() { pingWorker() }))
 	c.Start()
 }
 
 func main() {
 	router := mux.NewRouter()
-	router.HandleFunc(webPrefix+"wake/{host}", wake).Methods("GET")
-	router.HandleFunc(webPrefix, index).Methods("GET")
+	router.HandleFunc(hostConfig.Core.WebPrefix+"wake/{host}", wake).Methods("GET")
+	router.HandleFunc(hostConfig.Core.WebPrefix, index).Methods("GET")
+
+	// Inital run, the next run is executed via cron
+	go func() { pingWorker() }()
 
 	fs := justFilesFilesystem{http.Dir(hostConfig.Core.TemplateDir + "static/")}
-	router.PathPrefix(webPrefix + "static/").Handler(http.StripPrefix(webPrefix+"static/", http.FileServer(fs)))
+	router.PathPrefix(hostConfig.Core.WebPrefix + "static/").Handler(http.StripPrefix(hostConfig.Core.WebPrefix+"static/", http.FileServer(fs)))
 
-	log.Println("Listen on: " + listenAddress)
+	log.Println("Listen on: " + hostConfig.Core.Address)
 	srv := &http.Server{
 		Handler: router,
-		Addr:    listenAddress,
+		Addr:    hostConfig.Core.Address,
 		// Good practice: enforce timeouts for servers you create!
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
 
-	log.Fatal(srv.ListenAndServe())
+	log.Fatalln(srv.ListenAndServe())
 }
 
 func (fs justFilesFilesystem) Open(name string) (http.File, error) {
@@ -129,11 +131,11 @@ func wake(w http.ResponseWriter, r *http.Request) {
 	host := mux.Vars(r)["host"]
 	if hostConfig.Workstations[host].MAC != "" {
 		etherWake(hostConfig.Workstations[host].MAC)
-		changeSended(hostConfig.Workstations[host], true)
 	}
+	hostConfig.Workstations[host] = changeSended(hostConfig.Workstations[host], true)
 	hostConfig.Workstations[host] = changeAliveness(hostConfig.Workstations[host], true)
 	w.Header().Set("X-WakeOnLan", host)
-	http.Redirect(w, r, webPrefix, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, hostConfig.Core.WebPrefix, http.StatusTemporaryRedirect)
 
 }
 
@@ -141,7 +143,7 @@ func wake(w http.ResponseWriter, r *http.Request) {
 func index(w http.ResponseWriter, r *http.Request) {
 	p := &indexPage{Title: hostConfig.Core.HTML.Title, Hosts: hostConfig}
 	t := template.New("index.tmpl")
-	t = template.Must(t.ParseGlob(templateDir + "/*.tmpl"))
+	t = template.Must(t.ParseGlob(hostConfig.Core.TemplateDir + "/*.tmpl"))
 	t.Execute(w, p)
 }
 
@@ -157,7 +159,7 @@ func pingWorker() {
 func changeAliveness(gostinkt workstation, isAlive bool) workstation {
 	// Reset sended when the current value of isAlive is true and will change to false
 	if gostinkt.Alive == true && gostinkt.Alive != isAlive {
-		gostinkt.Sended = false
+		gostinkt = changeSended(gostinkt, false)
 	}
 	gostinkt.Alive = isAlive
 	return gostinkt
