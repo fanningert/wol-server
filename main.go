@@ -30,6 +30,7 @@ type workstation struct {
 	NAME  string
 	IP    string
 	MAC   string
+	LINK  string
 	Alive bool
 }
 type appConfig struct {
