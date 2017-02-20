@@ -124,6 +124,7 @@ func main() {
 	colorPrint.Headline.Print("Template directory: ")
 	colorPrint.Default.Println(hostConfig.Core.TemplateDir)
 
+	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 100
 	srv := &http.Server{
 		Handler: router,
 		Addr:    hostConfig.Core.Address,
@@ -190,7 +191,7 @@ func pingWorker() {
 // work around the fact that maps aren't adressable https://github.com/golang/go/issues/3117
 func changeAliveness(gostinkt workstation, isAlive bool) workstation {
 	// Reset sended when the current value of isAlive is true and will change to false
-	if gostinkt.Alive == true && gostinkt.Alive != isAlive {
+	if gostinkt.Alive == false && gostinkt.Alive != isAlive {
 		gostinkt = changeSended(gostinkt, false)
 	}
 	gostinkt.Alive = isAlive
